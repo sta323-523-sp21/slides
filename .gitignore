@@ -1,0 +1,14 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+Makefile
+*.sh
+*.html
+*.pdf
+*.txt
+*_cache/
+*_files/
+libs/
+README.md

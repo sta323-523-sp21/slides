@@ -1,0 +1,923 @@
+---
+title: "Advanced Visualization Techniques"
+subtitle: "Statistical Computing & Programming"
+author: "Shawn Santo"
+institute: ""
+date: ""
+output:
+  xaringan::moon_reader:
+    css: "slides.css"
+    lib_dir: libs
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      comment = "#>", highlight = TRUE,
+                      fig.align = "center")
+```
+
+## Supplementary materials
+
+Full video lecture available in Zoom Cloud Recordings
+
+Additional resources
+
+- [Extend ggplot2](https://ggplot2.tidyverse.org/articles/extending-ggplot2.html) 
+  by creating your own stat, geom, and theme
+- [Network visualization with `ggraph`](https://ggraph.data-imaginist.com)
+- [Plotly ggplot2 library](https://plotly.com/ggplot2/)
+- [Template themes with `ggthemes`](https://github.com/jrnold/ggthemes)
+
+---
+
+## Packages
+
+For these slides we will use the following packages.
+
+.normal[
+```{r}
+library(tidyverse)
+library(gapminder)  # some data
+library(ggpol)      # parliament plots and more
+library(patchwork)  # combining plots
+library(gganimate)  # animations
+library(ggiraph)    # interactive plots
+```
+]
+
+Install any CRAN packages you do not have with 
+`install.packages("package_name")`.
+
+<br><br><br><br>
+
+**Code not shown for plots is available in the presentation notes. Press `P`.**
+
+---
+
+class: inverse, center, middle
+
+# Annotate plots
+
+---
+
+## Annotation
+
+`annotate()` allows you to add additional geoms to your plot space. Because
+the corresponding geom is not mapped to variables of a data frame, it is
+very convenient for adding text or highlighting a point.
+
+You can use a single `annotate()` call or many.
+
+```{r eval=FALSE}
+ggplot() +
+  annotate(geom = "text", x = 10, y = 10, 
+           label = "Text at (10, 10)", size = 10) +
+  annotate(geom = "point", x = 20, y = -20, color = "red", size = 4) +
+  annotate(geom = "segment", x = 0, xend = 10, y = 0, yend = 0, 
+           size = 3, color = "blue") +
+  annotate(geom = "curve", x = 10, xend = 15, y = -10, yend = -5, 
+           size = 3, color = "green") +
+  annotate(geom = "curve", x = 10, xend = 15, y = -5, yend = -10, 
+           size = 3, color = "orange")
+```
+
+Use the `...` in annotate to pass geom-specific arguments and values.
+
+---
+
+## Annotation
+
+```{r echo=FALSE}
+ggplot() +
+  annotate(geom = "text", x = 10, y = 10, label = "Text at (10, 10)", size = 10) +
+  annotate(geom = "point", x = 20, y = -20, color = "red", size = 4) +
+  annotate(geom = "segment", x = 0, xend = 10, y = 0, yend = 0, color = "blue", size = 3) +
+  annotate(geom = "curve", x = 10, xend = 15, y = -10, yend = -5, color = "green", size = 3) +
+  annotate(geom = "curve", x = 10, xend = 15, y = -5, yend = -10, color = "orange", size = 3) +
+  xlim(c(0, 20)) +
+  theme_minimal(base_size = 20)
+```
+
+---
+
+## Annotate to enhance
+
+Depending on your data, annotations can be a great way to enhance the reader's
+visual understanding.
+
+```{r}
+url <- str_c("http://www2.stat.duke.edu/~sms185/",
+             "data/sports/events.csv")
+events <- read_csv(url)
+```
+
+Let's only look at the shots that occurred during this match.
+
+```{r}
+shots <- events %>% 
+  filter(event_name == "Shot") %>% 
+  select(team_id, start_x, start_y)
+```
+
+---
+
+## Annotate to enhance
+
+.tiny[
+```{r fig.width=7, fig.height=4.66}
+ggplot(shots, mapping = aes(x = start_x, y = start_y)) +
+  geom_point(mapping = aes(color = factor(team_id)), size = 3) +
+  labs(color = "Team ID") +
+  theme(legend.position = "bottom")
+```
+]
+
+--
+
+Not very interesting or informative!
+
+--
+
+With a few annotations, we can enhance this a lot.
+
+---
+
+## Annotate to enhance
+
+.tiny[
+```{r fig.width=7, fig.height=4.66}
+ggplot(shots, mapping = aes(x = start_x, y = start_y)) +
+  geom_point(mapping = aes(color = factor(team_id)), size = 3) +
+  labs(color = "Team ID") +
+  theme_void() +
+  theme(legend.position = "bottom")
+```
+]
+
+--
+
+Setting `theme_void()` doesn't help much either.
+
+---
+
+## Annotate to enhance
+
+Create a function called `fc_annotate_pitch()` that has all the pitch field
+markings.
+
+.tiny.pull-left[
+```{r eval = FALSE}
+  fcn_list <- list(
+    boundary          = "annotate",
+    center_circle     = "annotate",
+                    ⋮
+    lower_right_arc   = "annotate",
+    upper_right_arc   = "annotate"
+  )
+```
+]
+
+.tiny.pull-right[
+```{r eval=FALSE}
+arg_list <- list(
+    boundary = list(
+      geom  = "rect",
+      xmin  = x_min,
+      xmax  = x_max,
+      ymin  = y_min,
+      ymax  = y_max,
+      color = palette_color,
+      fill  = palette_fill,
+      size  = 1.5
+    ),
+            ⋮
+    
+    upper_right_arc = list(
+      geom  = "curve",
+      x     = ifelse(coord_flip, x_max, x_max - 2 * x_adj),
+      xend  = ifelse(coord_flip, x_max - 2 * x_adj, x_max),
+      y     = ifelse(coord_flip, y_max - 2 * y_adj, y_max),
+      yend  = ifelse(coord_flip, y_max, y_max - 2 * y_adj),
+      color = palette_color
+    )
+  )
+```
+]
+
+Combine the functions and their parameters with 
+`invoke_map(fcn_list, arg_list)`.
+
+```{r echo=FALSE}
+fc_annotate_pitch <- function(dimensions = c(105, 70), palette = "gw",
+                              color = NULL, fill = NULL, coord_flip = FALSE) {
+
+  palette_color <- switch(
+    palette,
+    "gw"      = "grey60",
+    "classic" = "white",
+    "smurf"   = "white",
+    "dark"    = "white",
+    "wc"      = "#ffffff",
+    "bw"      = "#130a06"
+  )
+
+  palette_fill <- switch(
+    palette,
+    "gw"      = "white",
+    "classic" = "#196f0c",
+    "smurf"   = "#0033A0",
+    "dark"    = "#130a06",
+    "wc"      = "#8d1b3d",
+    "bw"      = "white"
+  )
+
+  if (!is.null(color)) palette_color <- color
+  if (!is.null(fill)) palette_fill <- fill
+
+  x_min <- 0
+  y_min <- 0
+  x_max <- dimensions[1]
+  y_max <- dimensions[2]
+  x_mid <- (x_max - x_min) / 2
+  y_mid <- (y_max - y_min) / 2
+  x_adj <- x_max / 105
+  y_adj <- y_max / 70
+
+  fcn_list <- list(
+    boundary          = "annotate",
+    center_circle     = "annotate",
+    center_point      = "annotate",
+    center_line       = "annotate",
+    left_penalty_box  = "annotate",
+    right_penalty_box = "annotate",
+    left_goal_box     = "annotate",
+    right_goal_box    = "annotate",
+    left_penalty_dot  = "annotate",
+    right_penalty_dot = "annotate",
+    left_goal         = "annotate",
+    right_goal        = "annotate",
+    left_box_arc      = "annotate",
+    right_box_arc     = "annotate",
+    lower_left_arc    = "annotate",
+    upper_left_arc    = "annotate",
+    lower_right_arc   = "annotate",
+    upper_right_arc   = "annotate"
+  )
+
+  arg_list <- list(
+    boundary = list(
+      geom  = "rect",
+      xmin  = x_min,
+      xmax  = x_max,
+      ymin  = y_min,
+      ymax  = y_max,
+      color = palette_color,
+      fill  = palette_fill,
+      size  = 1.5
+    ),
+    center_circle = list(
+      geom  = "path",
+      x     = x_mid + (9.15 * x_adj) * cos(seq(0, 2 * pi, length.out = 100)),
+      y     = y_mid + (9.15 * y_adj) * sin(seq(0, 2 * pi, length.out = 100)),
+      color = palette_color
+    ),
+    center_point = list(
+      geom  = "point",
+      x     = x_mid,
+      y     = y_mid,
+      size  = 2,
+      color = palette_color
+    ),
+    center_line = list(
+      geom  = "segment",
+      x     = x_mid,
+      y     = y_min,
+      xend  = x_mid,
+      yend  = y_max,
+      color = palette_color
+    ),
+    left_penalty_box = list(
+      geom  = "rect",
+      xmin  = x_min,
+      xmax  = 16.5 * x_adj,
+      ymin  = (y_max - (40.3 * y_adj)) / 2,
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (40.3 * y_adj),
+      color = palette_color,
+      fill  = palette_fill,
+      alpha = 0
+    ),
+    right_penalty_box = list(
+      geom  = "rect",
+      xmin  = x_max - (16.5 * x_adj),
+      xmax  = x_max,
+      ymin  = (y_max - (40.3 * y_adj)) / 2,
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (40.3 * y_adj),
+      color = palette_color,
+      fill  = palette_fill,
+      alpha = 0
+    ),
+    left_goal_box = list(
+      geom  = "rect",
+      xmin  = 0,
+      xmax  = 5.5 * x_adj,
+      ymin  = (y_max - (40.3 * y_adj)) / 2 + (11 * y_adj),
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (29.3 * y_adj),
+      color = palette_color,
+      fill  = palette_fill,
+      alpha = 0
+    ),
+    right_goal_box = list(
+      geom  = "rect",
+      xmin  = x_max - (5.5 * x_adj),
+      xmax  = x_max,
+      ymin  = (y_max - (40.3 * y_adj)) / 2 + (11 * y_adj),
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (29.3 * y_adj),
+      color = palette_color,
+      fill  = palette_fill,
+      alpha = 0
+    ),
+    left_penalty_dot = list(
+      geom  = "point",
+      x     = 11 * x_adj,
+      y     = y_mid,
+      size  = 2,
+      color = palette_color
+    ),
+    right_penalty_dot = list(
+      geom  = "point",
+      x     = x_max - (11 * x_adj),
+      y     = y_mid,
+      size  = 2,
+      color = palette_color
+    ),
+    left_goal = list(
+      geom  = "rect",
+      xmin  = x_min - (2.4 * x_adj),
+      xmax  = x_min,
+      ymin  = (y_max - (40.3 * y_adj)) / 2 + (16.5 * y_adj),
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (23.3 * y_adj),
+      color = palette_color,
+      fill  = palette_color
+    ),
+    right_goal = list(
+      geom  = "rect",
+      xmin  = x_max,
+      xmax  = x_max + (2.4 * x_adj),
+      ymin  = (y_max - (40.3 * y_adj)) / 2 + (16.5 * y_adj),
+      ymax  = (y_max - (40.3 * y_adj)) / 2 + (23.3 * y_adj),
+      color = palette_color,
+      fill  = palette_color
+    ),
+    left_box_arc = list(
+      geom  = "curve",
+      x     = 16.5 * x_adj,
+      xend  = 16.5 * x_adj,
+      y     = y_mid - (ifelse(coord_flip, -1, 1) *
+                         sqrt((y_adj * 5.5) ^ 2 + (y_adj * 9.15) ^ 2)),
+      yend  = y_mid + (ifelse(coord_flip, -1, 1) *
+                         sqrt((y_adj * 5.5) ^ 2 + (y_adj * 9.15) ^ 2)),
+      color = palette_color
+    ),
+    right_box_arc = list(
+      geom  = "curve",
+      x     = x_max - (16.5 * x_adj),
+      xend  = x_max - (16.5 * x_adj),
+      y     = y_mid + (ifelse(coord_flip, -1, 1) *
+                         sqrt((y_adj * 5.5) ^ 2 + (y_adj * 9.15) ^ 2)),
+      yend  = y_mid - (ifelse(coord_flip, -1, 1) *
+                         sqrt((y_adj * 5.5) ^ 2 + (y_adj * 9.15) ^ 2)),
+      color = palette_color
+    ),
+    lower_left_arc = list(
+      geom  = "curve",
+      x     = ifelse(coord_flip, x_min, x_min + 2 * x_adj),
+      xend  = ifelse(coord_flip, x_min + 2 * x_adj, x_min),
+      y     = ifelse(coord_flip, y_min + 2 * y_adj, y_min),
+      yend  = ifelse(coord_flip, y_min, y_min + 2 * y_adj),
+      color = palette_color
+    ),
+    upper_left_arc = list(
+      geom  = "curve",
+      x     = ifelse(coord_flip, x_min + 2 * x_adj, x_min),
+      xend  = ifelse(coord_flip, x_min, x_min + 2 * x_adj),
+      y     = ifelse(coord_flip, y_max, y_max - 2 * y_adj),
+      yend  = ifelse(coord_flip, y_max -2 * y_adj, y_max),
+      color = palette_color
+    ),
+    lower_right_arc = list(
+      geom  = "curve",
+      x     = ifelse(coord_flip, x_max - 2 * x_adj, x_max),
+      xend  = ifelse(coord_flip, x_max, x_max - 2 * x_adj),
+      y     = ifelse(coord_flip, y_min, y_min + 2 * y_adj),
+      yend  = ifelse(coord_flip, y_min + 2 * y_adj, y_min),
+      color = palette_color
+    ),
+    upper_right_arc = list(
+      geom  = "curve",
+      x     = ifelse(coord_flip, x_max, x_max - 2 * x_adj),
+      xend  = ifelse(coord_flip, x_max - 2 * x_adj, x_max),
+      y     = ifelse(coord_flip, y_max - 2 * y_adj, y_max),
+      yend  = ifelse(coord_flip, y_max, y_max - 2 * y_adj),
+      color = palette_color
+    )
+  )
+
+  invoke_map(fcn_list, arg_list)
+}
+```
+
+---
+
+## Annotate to enhance
+
+.tiny[
+```{r fig.width=7, fig.height=4.66}
+ggplot(shots, mapping = aes(x = start_x, y = start_y)) +
+  fc_annotate_pitch(dimensions = c(100, 100)) +
+  geom_point(mapping = aes(color = factor(team_id)), size = 3) +
+  labs(color = "Team ID") +
+  theme_void() +
+  theme(legend.position = "bottom")
+```
+]
+
+--
+
+Much more informative! Full function: [fc_annotate_pitch()](http://www2.stat.duke.edu/~sms185/R/fc_annotate_pitch.R)
+
+---
+
+class: inverse, center, middle
+
+# Organizing plots: package `patchwork`
+
+---
+
+class: inverse, center, middle
+
+# Aside: parliament plots with `ggpol`
+
+---
+
+## Data: Congressional seats
+
+```{r}
+url <- str_c("http://www2.stat.duke.edu/~sms185/",
+             "data/politics/congress_long.csv")
+congress <- read_csv(url)
+congress
+```
+
+---
+
+## Parliament plot
+
+.tiny[
+```{r fig.width=8, fig.height=4}
+ggplot(data = congress[congress$year_start == 1913 & congress$branch == "house", ]) +
+  geom_parliament(aes(seats = seats, fill = factor(party)), show.legend = TRUE, color = "black") + #<<
+  scale_fill_manual(values = c("#3A89CB", "#D65454", "#BF6FF0", "Grey"), 
+                    labels = c("Dem", "GOP", "Other", "Vacant")) +
+  labs(fill = "Party") +
+  coord_fixed() +
+  theme_void(base_size = 20)
+```
+]
+
+---
+
+## Package `ggpol`
+
+- Package `ggpol` supports a few other `geom` functions: 
+
+    - `geom_arcbar()`,
+    - `geom_bartext()`, 
+    - `geom_circle()`, 
+    - `geom_tshighlight()`,
+    - `geom_boxjitter()`.
+
+- See https://github.com/erocoar/ggpol
+
+---
+
+## My function: `plot_congress()`
+
+.tiny[
+```{r}
+plot_congress <- function(data, year, leg_branch, legend = TRUE, text_size = 8) {
+  data %>% 
+    filter(year_start == year, branch == leg_branch) %>% 
+    ggplot() +
+    geom_parliament(aes(seats = seats, fill = factor(party)), 
+                    show.legend = legend, color = "black") +
+    scale_fill_manual(values = c("#3A89CB", "#D65454", "#BF6FF0", "Grey"), 
+                      labels = c("Dem", "GOP", "Other", "Vacant")) +
+    annotate("text", x = 0, y = .5, label = paste(year, leg_branch), 
+             size = text_size) +
+    labs(fill = "Party") +
+    coord_fixed() +
+    theme_void(base_size = 20)
+}
+```
+]
+
+Use package `patchwork` to organize multiple plots in a single window. No need
+to facet.
+
+```{r}
+my_plot <- ggplot()
+class(my_plot)
+```
+
+---
+
+## Plot creation
+
+```{r}
+ph_1993 <- plot_congress(congress, 1993, "house")
+
+ph_2001 <- plot_congress(congress, 2001, "house", legend = FALSE)
+
+ph_2009 <- plot_congress(congress, 2009, "house", legend = FALSE)
+
+ph_2017 <- plot_congress(congress, 2017, "house", legend = FALSE)
+```
+
+<br/>
+
+Object `ph_1993` has a legend, the rest do not.
+
+---
+
+## Horizontal patchwork
+
+```{r fig.width=14, fig.height=8, cache=TRUE}
+ph_1993 + ph_2017
+```
+
+---
+
+## Vertical patchwork
+
+```{r fig.width=14, fig.height=8, cache=TRUE}
+ph_1993 + ph_2017 + plot_layout(ncol = 1)
+```
+
+---
+
+## Group patchwork
+
+```{r fig.width=16, fig.height=10, cache=TRUE}
+ph_1993 + (ph_2001 + ph_2009) + ph_2017 + 
+  plot_layout(ncol = 1, widths = 1)
+```
+
+---
+
+```{r fig.width=16, fig.height=10, cache=TRUE}
+(ph_1993 | ph_2001) / (ph_2009 | ph_2017)
+```
+
+---
+
+```{r echo=FALSE}
+ps_1993 <- plot_congress(congress, 1993, "senate", legend = FALSE, text_size = 6)
+ps_2001 <- plot_congress(congress, 2001, "senate", legend = FALSE, text_size = 6)
+ps_2009 <- plot_congress(congress, 2009, "senate", legend = TRUE, text_size = 6)
+ps_2017 <- plot_congress(congress, 2017, "senate", legend = FALSE, text_size = 6)
+```
+
+```{r fig.width=12, cache=F}
+(ps_1993 | ps_2001 | ps_2009) /  ps_2017 + plot_layout(widths = 1)
+```
+
+???
+
+.tiny[
+```{r}
+ps_1993 <- plot_congress(congress, 1993, "senate", legend = FALSE, text_size = 6)
+ps_2001 <- plot_congress(congress, 2001, "senate", legend = FALSE, text_size = 6)
+ps_2009 <- plot_congress(congress, 2009, "senate", legend = TRUE, text_size = 6)
+ps_2017 <- plot_congress(congress, 2017, "senate", legend = FALSE, text_size = 6)
+```
+]
+
+---
+
+## Package `patchwork`
+
+- Supports operators `+`, `-`, `|` (besides), `/` (over)
+
+- Specify layouts and spacing with `plot_layout()`, `plot_spacer()`, 
+  respectively
+
+- Add grouping with `{ }` or `( )`
+
+- Use `&` or `*` to add elements to all subplots, `*` only affects current
+  nesting level
+
+- See https://github.com/thomasp85/patchwork
+
+---
+
+class: inverse, center, middle
+
+# Exercise
+
+---
+
+## Flint water data
+
+Create a set of visualizations based on tibble object `flint`. Use patchwork
+to combine these in a single plot window.
+
+```{r}
+url <- str_c("http://www2.stat.duke.edu/~sms185/",
+             "data/health/flint.csv")
+flint <- read_csv(url)
+flint
+```
+
+---
+
+class: inverse, center, middle
+
+# Animation: `gganimate()`
+
+---
+
+## Data: `gapminder`
+
+```{r}
+library(gapminder) 
+gapminder
+```
+
+---
+
+## Nothing new
+
+.tiny[
+```{r fig.width=12, fig.height=6}
+ggplot(gapminder, aes(x = gdpPercap, y = lifeExp, size = pop, colour = country)) +
+  geom_point(alpha = 0.7, show.legend = FALSE) +
+  scale_colour_manual(values = country_colors) +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  theme_bw(base_size = 16)
+```
+]
+
+---
+
+## Animate with `gganimate()`
+
+```{r cache=TRUE, echo=FALSE, fig.width=12, fig.height=7}
+ggplot(gapminder, aes(x = gdpPercap, y = lifeExp, size = pop, colour = country)) +
+  geom_point(alpha = 0.7, show.legend = FALSE) +
+  scale_colour_manual(values = country_colors) +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  theme_bw(base_size = 16) +
+  labs(title = 'Year: {frame_time}', x = 'GDP per capita', y = 'Life expectancy') + #<<
+  transition_time(year) + #<<
+  ease_aes('linear') #<<
+```
+
+---
+
+## What did we add?
+
+Base plot
+
+.tiny[
+```{r eval=FALSE}
+ggplot(gapminder, aes(x = gdpPercap, y = lifeExp, size = pop, colour = country)) +
+  geom_point(alpha = 0.7, show.legend = FALSE) +
+  scale_colour_manual(values = country_colors) +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  theme_bw(base_size = 16)
+```
+]
+
+--
+
+Transform to animation
+
+.tiny[
+```{r eval=FALSE}
+ggplot(gapminder, aes(x = gdpPercap, y = lifeExp, size = pop, colour = country)) +
+  geom_point(alpha = 0.7, show.legend = FALSE) +
+  scale_colour_manual(values = country_colors) +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  facet_wrap(~continent) +
+  theme_bw(base_size = 16) +
+  labs(title = 'Year: {frame_time}', x = 'GDP per capita', y = 'Life expectancy') + #<<
+  transition_time(year) + #<<
+  ease_aes('linear') #<<
+```
+]
+
+---
+
+## Another example
+
+First, reshape the data.
+
+```{r}
+flint_long <- flint %>% 
+  pivot_longer(cols = draw1:draw3, names_to = "draw", values_to = "pb_level")
+```
+
+--
+
+```{r}
+p <- flint_long %>% 
+  filter(zip == 48507, pb_level < 75) %>%
+  mutate(flush_time = case_when(
+    draw == "draw1" ~ 0,
+    draw == "draw2" ~ 45,
+    draw == "draw3" ~ 120
+  )) %>% 
+  ggplot(mapping = aes(x = flush_time, y = pb_level, group = id)) +
+  geom_line() +
+  geom_point(aes(group = seq_along(flush_time)), size = 3) +
+  geom_point(color = "blue", size = 3) +
+  scale_x_continuous(breaks = c(0, 45, 120), 
+                     labels = c("Draw 1", "Draw 2", "Draw 3")) +
+  geom_line(color = "grey90") +
+  labs(y = "Lead level (ppb)", x = "") +
+  theme_bw(base_size = 16)
+```
+
+---
+
+class: center, middle
+
+```{r echo=FALSE}
+p
+```
+
+---
+
+```{r}
+p <- p + transition_reveal(flush_time)
+animate(p, end_pause = 30)
+```
+
+---
+
+## Package `gganimate`
+
+- Core functions
+    - `transition_*()` defines how the data should be spread out and how it 
+      relates to itself across time.
+  
+    - `view_*()` defines how the positional scales should change along the 
+      animation.
+
+    - `shadow_*()` defines how data from other points in time should be presented 
+      in the given point in time.
+
+    - `enter_*()` / `exit_*()` defines how new data should appear and how old data 
+      should disappear during the course of the animation.
+
+    - `ease_aes()` defines how different aesthetics should be eased during 
+      transitions.
+      
+- Label variables
+    - function dependent, use `{` `}` to access their values.
+
+- See https://gganimate.com
+
+---
+
+class: inverse, center, middle
+
+# Interactive plots: `ggiraph`
+
+---
+
+## Data: NC births and SID
+
+```{r}
+nc <- read_csv("http://www2.stat.duke.edu/~sms185/data/health/nc_birth_sid.csv")
+nc
+```
+
+---
+
+## Standard scatter plot
+
+.tiny[
+```{r echo=FALSE, fig.width=10, fig.height=7}
+ggplot(nc, mapping = aes(x = AREA, y = BIR74)) +
+  geom_point(size = 4, alpha = .5) +
+  theme_minimal()
+```
+]
+
+---
+
+## Make it interactive
+
+- **using a `tooltip`**
+
+```{r eval=FALSE}
+gg_name <- ggplot(nc, mapping = aes(x = AREA, y = BIR74)) +
+  geom_point_interactive(aes(tooltip = NAME), size = 4, alpha = .5) + #<<
+  theme_minimal()
+
+girafe(ggobj = gg_name)
+```
+
+--
+
+- **using hover functionality**
+
+```{r eval=FALSE}
+gg_hover <- ggplot(nc, mapping = aes(x = AREA, y = BIR74)) +
+  geom_point_interactive(aes(data_id = NAME, tooltip = NAME), #<<
+                         size = 4, alpha = .5) +
+  theme_minimal()
+
+girafe(ggobj = gg_hover)
+```
+
+---
+
+- **using on-click functionality**
+
+```{r eval=FALSE}
+nc$wiki <- paste0('window.open(\"', 
+                  "https://www.ncpedia.org/geography/", 
+                  tolower(nc$NAME), '\")')
+
+gg_name <- ggplot(nc, mapping = aes(x = AREA, y = BIR74)) +
+  geom_point_interactive(aes(tooltip = NAME, onclick = wiki), #<<
+                         size = 4, alpha = .5) +
+  theme_minimal()
+
+girafe(ggobj = gg_name)
+```
+
+---
+
+## Package `ggiraph`
+
+- Add tooltips, animations, and JavaScript actions to ggplot graphics
+
+- In general, instead of `geom_<plot_type>()` use
+  `geom_<plot_type>_interactive()`
+
+- Interactivity is added to ggplot geometries, legends and theme elements, 
+  via the following aesthetics:
+    - tooltip: tooltips to be displayed when mouse is over elements
+    
+    - onclick: JavaScript function to be executed when elements are clicked
+    
+    - data_id: id to be associated with elements (used for hover and click actions)
+
+- Function `girafe()` translates the graphic into an interactive web-based
+  graphic
+
+- See https://github.com/davidgohel/ggiraph
+
+---
+
+## References
+
+1. A Grammar of Animated Graphics. (2021). 
+   https://gganimate.com/
+
+2. Create GIFs with gifski in knitr Documents - Yihui Xie | 谢益辉. (2021).
+   https://yihui.org/en/2018/08/gifski-knitr/
+
+3. davidgohel/ggiraph. (2021).
+   https://github.com/davidgohel/ggiraph
+
+4. erocoar/ggpol. (2021). 
+   https://github.com/erocoar/ggpol
+
+5. Extending ggplot2. (2021). 
+   https://ggplot2.tidyverse.org/articles/extending-ggplot2.html
+
+6. thomasp85/patchwork. (2021).
+   https://github.com/thomasp85/patchwork
+
+7. Top 50 ggplot2 Visualizations - The Master List (With Full R Code). (2020).
+   http://r-statistics.co/Top50-Ggplot2-Visualizations-MasterList-R-Code.html
+
+
+
